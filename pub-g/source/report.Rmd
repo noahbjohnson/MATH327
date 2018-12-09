@@ -1,10 +1,10 @@
 ---
 title: 'MATH327 - Player Unknown''s Battleground: Solo Rating Linear Analysis'
-author: "Mohammed Al Jardat, Collin Carpenter"
+author: "Noah B Johnson, Mohammed Al Jardat, Collin Carpenter"
 date: "11/13/2017"
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
   word_document: default
 ---
 
