@@ -1,0 +1,462 @@
+---
+title: "Happiness Analysis"
+author: "Noah B Johnson"
+date: "11/3/2017"
+output:
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+# Set echo to TRUE for draft submission
+knitr::opts_chunk$set(echo = FALSE)
+# Set global figure size
+knitr::opts_chunk$set(fig.width=6, fig.height=3.5)
+
+#Library Includes
+library(corrplot)
+library(readr)
+library(diptest)
+library(MASS)
+library(car)
+library(reshape2)
+library(ggplot2)
+library(zoo)
+library(lmtest)
+library(leaps)
+```
+
+```{r import}
+dataset <- read_csv("~/Google Drive/MATH327/NewProject1/hapiness/dataset.csv")
+```
+
+```{r update names}
+# Update variable names for brevity and clarity
+names(dataset) <- c("country","year","AVGHappiness","LogGDPPC","SocialSupport","LifeExpectancy","Freedom","Generosity","AVGIsCorrupt","PosAffect","NegAffect","HappinessSD","HappinessCV")
+
+# attach data for easier reference
+attach(dataset)
+```
+
+## Introduction
+
+This report examines possible contributing factors to the Happiness of a nation's populace ("AVGHappiness") rated on a scale of 1-10. All variables are national averages, mostly of survey responses, with the exception of "country","year","HappinessSD","HappinessSD/mean". The primary goal of this report is determine the most predictive measure of average national Happiness.
+
+
+## Exploratory Analysis
+```{r}
+par(mfrow = c(1, 2))
+hist(AVGHappiness,breaks = 25)
+boxplot (AVGHappiness, horizontal = T, xlab="Average National Happiness", main="Boxplot of AVGHappiness")
+```
+
+It looks like the response variable is either noisy or multi-modal. It should be tested for multi-modality using Hartigans' dip test. The box-plot indicates if there is bi-modality, It doesn't strongly affect the distribution.
+
+H0: The variable is uni-modal, Ha: The variable is multi-modal, significance level: 90%
+
+```{r}
+#test for 
+dipPvalue <- dip.test(AVGHappiness)$p.value
+```
+
+Result: The test's p-value of: `r round(dipPvalue,4)` is not significant at the 90% level. Multi-modality is not significant.
+
+```{r fig1, fig.height = 15, fig.width = 15}
+pairs (dataset[,2:13])
+cormat <- cor(dataset [,2:13])
+corrplot(cormat, method="ellipse")
+round (cormat, 2)
+```
+
+The pairs plot appears to show a non-linear relationship between AVGisCorrupt and every other variable. The strongest relationship in the correlation matrix is that of LifeExpectancy~LogGDPPC. The most significant relationships with the independent variable in order of significance are LogGDPPC, HappinessCV, LifeExpectancy, and SocialSupport.
+
+
+## First Order Model
+
+A first-order linear model with all eleven predictors.
+
+```{r fig.height = 10, fig.width = 10}
+#check corr of year
+fit1 = lm (AVGHappiness ~ year + LogGDPPC + SocialSupport + LifeExpectancy + Freedom + Generosity + AVGIsCorrupt + PosAffect + NegAffect + HappinessSD + HappinessCV)
+#add resid plot
+summary (fit1)
+anova (fit1)
+summfit1 = summary (fit1, correlation = T)
+corrplot (summfit1$correlation, method="number")
+```
+
+The analysis of variance table suggests that all but NegAffect and HappinessSD are significant predictors.  The coefficient tests suggest that all but year, LifeExpectancy, and Freedom are significant.  The R-squared is 0.9429, with adjusted R-squared of 0.9423, which indicate that most of the variability in AVGHappiness is being explained by this model.  The residual standard error is .2719 average happiness, which is small relative to the range of AVGHappiness values (2.70 to 7.97 AVGhappiness).
+
+# Residual Analysis of the First Order Model
+
+```{r}
+par (mfrow = c(1, 2))
+plot (fit1, which = c(1, 2))
+boxplot (fit1$residuals, ylab="Fit1 Residuals")
+plot (fit1$fitted.values, AVGHappiness, main="Actual vs. Fitted", ylab="AVGHappiness")
+abline (0,1,col="red")
+```
+
+Residual analysis suggests that there is a curvature effect missing from the model or else a transformation is needed.  The Box-Cox method suggests...
+
+```{r}
+boxCox(fit1, lambda = seq(-.87, -.7, 1/20))
+```
+
+The Box-Cox analysis suggests an inverse power transformation, with $\lambda=-0.775$.
+
+```{r}
+bcAVGHappiness <- bcPower(AVGHappiness,-.775)
+fit2 <- lm(bcAVGHappiness ~ year + LogGDPPC + SocialSupport + LifeExpectancy + Freedom + Generosity + AVGIsCorrupt + PosAffect + NegAffect + HappinessSD + HappinessCV)
+boxCox(fit2,lambda = seq(.5,1.5,1/10))
+```
+
+The Box-Cox plot for fit2 indicates little or no further transformation is needed, as the confidence interval includes 1.
+
+```{r}
+summary(fit2)
+#subsets
+anova(fit2)
+par (mfrow = c(1, 2))
+plot (fit2, which = c(1, 2))
+boxplot (fit2$residuals, ylab="Fit2 Residuals")
+plot (fit2$fitted.values, bcAVGHappiness, main="Actual vs. Fitted", ylab="Box-Cox AVGHappiness")
+abline (lm(bcAVGHappiness ~ fit2$fitted.values),col="red")
+```
+
+The residuals plots confirm the finding that the residual is more normal, however the QQ plot appears to show significant tails still. I believe that this is our optimal Box-Cox transformation. The r-squared value of .978 is significantly higher than that in fit1. According to the summary and anova for fit2, there are fewer significant predictors. This calls for elimination.
+
+
+# Backward elimination method - Manual
+
+Removing LifeExpectancy from the model, we obtain:
+
+```{r}
+par (mfrow = c(1,2))
+fit3 <- lm(bcAVGHappiness ~ LogGDPPC + HappinessCV + AVGIsCorrupt + HappinessSD + Generosity + SocialSupport + NegAffect + PosAffect + Freedom)
+summary (fit3, correlation=T)
+anova (fit3)
+round (summary (fit3)$coefficients, 6)
+```
+
+There was no discernible change in the r-squared value, however we did very slightly improve the model by removing LifeExpectancy. 
+
+Removing Freedom, NegAffect, and PosAffect from the model, we obtain:
+
+```{r}
+par (mfrow = c(1,2))
+fit4 <- lm(bcAVGHappiness ~ LogGDPPC + HappinessCV + AVGIsCorrupt + HappinessSD + Generosity + SocialSupport)
+summary (fit4, correlation=T)
+anova (fit4)
+round (summary (fit4)$coefficients, 6)
+```
+
+By removing these three predictors, the model changed marginally. The r-squared value went down by .0002, which is more than made up for by the fact that the model is much simpler and has less variability. None of these three predictors were significant at the .99 level.
+
+```{r}
+pairs(formula(bcAVGHappiness ~ LogGDPPC + HappinessCV + AVGIsCorrupt + HappinessSD + Generosity + SocialSupport),data=dataset)
+residualPlot(fit4)
+plot(fit4$fitted.values,fit4$residuals)
+```
+
+The residuals plot for fit4 is still a bit of a mess, and there isn't much improvement in the model from manual elimination. However, there is a way to automate that process for the optimal results.
+
+
+```{r}
+#name the fit2 as fitbc
+fitbc <- fit2
+```
+
+# Both directions elimination method - AIC
+
+```{r}
+# step 1
+step1 <- stepAIC(fitbc,direction = "both")
+summ1 <- summary(step1)
+# step 2
+step2 <- stepAIC(step1,direction = "both")
+summ2 <- summary(step2)
+
+anova(fitbc,step1,step2)
+par (mfrow = c(1,2))
+plot(fitbc$fitted.values,fitbc$residuals)
+abline(0,0, col="red")
+plot(step1$fitted.values,step1$residuals)
+abline(0,0, col="red")
+```
+
+The AIC algorithm only removed one predictor - LifeExpectancy. This is the same predictor that was initially removed in the manual backwards elimination. This method does not yield any notable improvement.
+
+# Subset Selection Method - BIC
+
+```{r subsets}
+predictors <- dataset[,c(2,4:13)]
+regfit <- regsubsets(predictors, bcAVGHappiness, nvmax = 200, nested = FALSE, really.big = TRUE, all.best = TRUE)
+reg.summary <- summary(regfit)
+reg.summary$rsq
+reg.summary
+```
+
+It looks like the highest $r^2$ value is obtained by using all 11 predictors. This is a similar conclusion to what we reached before, however it takes more than the $r^2$ value to determine the best fitting model.
+
+```{r R2 vs Predictor count}
+#plot rsq
+library(ggvis)
+rsq <- as.data.frame(reg.summary$rsq)
+names(rsq) <- "R2"
+rsq %>% 
+        ggvis(x=~ c(1:nrow(rsq)), y=~R2 ) %>%
+        layer_points(fill = ~ R2 ) %>%
+        add_axis("y", title = "R2") %>% 
+        add_axis("x", title = "Number of predictors")
+```
+
+Plotted above is the number of variables included in a model, and the best $r^2$ for models with that many predictors. The plot shows that little change in the $r^2$ value for the best model with 2 predictors and the best model with all 11 predictors, and a very small difference between 3 predictors and 11.
+
+```{r Model Plots,fig.height=6}
+par(mfrow=c(2,2))
+plot(reg.summary$rss ,xlab="Number of predictors ",ylab="RSS",type="l")
+# which.min(reg.summary$rss)
+points(11,reg.summary$rss[11], col="red",cex=2,pch=20)
+plot(reg.summary$adjr2 ,xlab="Number of predictors ", ylab="Adjusted R2",type="l")
+# which.max(reg.summary$adjr2)
+points(11,reg.summary$adjr2[11], col="red",cex=2,pch=20)
+plot(reg.summary$cp ,xlab="Number of predictors ",ylab="Cp", type='l')
+# which.min(reg.summary$cp)
+points(10,reg.summary$cp [10],col="red",cex=2,pch=20)
+plot(reg.summary$bic ,xlab="Number of predictors ",ylab="Bayesian info. criterion",type='l')
+# which.min(reg.summary$bic)
+points(6,reg.summary$bic [6],col="red",cex=2,pch=20)
+```
+
+# Final model selection
+
+The two criterion that I normally use for selecting a model are AIC and BIC. In this case the two methods give significantly different results. AIC gives the optimal number of predictors as 10, while BIC gives the optimal predictors at 6. In the case of this data set, it makes the most sense to go with the BIC recommended 6 predictors. The first reason for this is the general application of AIC vs BIC. Generally, AIC is preferred for predictions, while BIC is best used for explanation. The second the reason for selecting the BIC recommendation is the charts above and their underlying data. The improvement seen between 6 and 10 predictors is very small in terms of RSS, $r^2$, and Cp, thus 6 predictors is preferable to avoid over-fitting and over-complication of the model.
+
+This the final model's summary and ANOVA: 
+<!--
+Dependant Variable: AVGHappiness transformed by the boxcox exponent (-.775)
+
+Predictors: LogGDPPC, SocialSupport, Generosity, AVGIsCorrupt, HappinessSD, HappinessCV
+-->
+
+```{r}
+#declare the best model as var fit
+fit <- lm(bcAVGHappiness ~ (LogGDPPC + SocialSupport + Generosity + AVGIsCorrupt + HappinessSD + HappinessCV)^2)
+summary(fit)
+anova(fit)
+```
+
+All of the predictors are significant at the 99.9% level in the summary and ANOVA. When factored into the model, 9 predictor interactions are noted as significant at the 99% level, 10 in the anova table. Including interactions in the model increases the r-squared by almost 2%! This means that less than one percent of the error in the data cannot be explained by using our model. This is impressive precision for survery data.
+
+
+# Model Diagnostics
+
+## Outlier test
+
+```{r}
+# outliers <- outlierTest(fit, n.max = 100, cutoff = .5, order = TRUE)
+# outliers <- names(outliers$rstudent)
+# outliers
+plot(fit)
+dataset2 <- dataset[-c(1238, 1216, 510, 1190, 156,  268,  549,  980,  127,  190,  652,  1167),]
+```
+
+The bonferroni outlier test determined the following rows are outliers: 1238, 1216, 510, 1190, 156,  268,  549,  980,  127,  190,  652,  1167. The plots for the model support this conclusion as well.
+
+I created a new data set without these outliers, and the recreated the model using the new data, as well as an analysis of the effects of these removal.
+
+```{r}
+#declare new transformed response
+bcAVGHappiness1 <- bcPower(dataset2$AVGHappiness,-.775)
+#create fit without outliers
+fit01 <- lm(dataset2$AVGHappiness ~ (dataset2$LogGDPPC + dataset2$SocialSupport + dataset2$Generosity + dataset2$AVGIsCorrupt + dataset2$HappinessSD + dataset2$HappinessCV)^2)
+summary(fit01)
+```
+
+The removal of the outliers made the $r^2$ of the model increase, however one of the predictors and its consituent interactions are no longer significant at the .999 level. Removing the predictor Generosity has a extremely small effect on the accuracy of the model, and for the sake of a concise model, I will continue without it.
+
+```{r subsets1}
+fit02 <- lm(dataset2$AVGHappiness ~ (dataset2$LogGDPPC + dataset2$SocialSupport + dataset2$AVGIsCorrupt + dataset2$HappinessSD + dataset2$HappinessCV)^2)
+summary(fit02)
+```
+
+This is now the current model summary, without Generosity.
+
+```{r}
+boxCox(fit02, lambda = seq(-.9, -.5, 1/20))
+```
+
+The box cox plot suggests that a different transformation is needed than before.
+
+```{r}
+bcAVGHappiness1 <- bcPower(dataset2$AVGHappiness,-.675)
+fit02 <- lm(bcAVGHappiness1 ~ (dataset2$LogGDPPC + dataset2$SocialSupport + dataset2$AVGIsCorrupt + dataset2$HappinessSD + dataset2$HappinessCV)^2)
+summary(fit02)
+```
+
+The new transformation of ^-675 on the dependent variable increases the r-squared value significantly.
+
+## Residual Diagnostics
+
+```{r,fig.height=6}
+layout(matrix(c(1,2,3,4),2,2))
+# plot(fit)
+# plot(fit01)
+plot(fit02)
+```
+
+The residuals appear to be greatly improved from the original model. For reference, below is the original linear model with no transformations, outlier omissions, or predicor omissions.
+
+```{r,fig.height=6}
+layout(matrix(c(1,2,3,4),2,2))
+plot(fit1)
+```
+
+The vast majority of the curvature was removed from the plots through the transformation and selection proccess. There is still a large divergence in the Normal Q-Q plot, but this may be explained later.
+
+```{r,fig.height=6}
+standresid <- stdres(fit02) #store the standardized residuals in a variable named "standresids"
+stud.del.resids <- rstudent(fit02) #store the studentized deleted residuals in a variable named "stud.del.resids"
+plot(fit02$fitted.values,stud.del.resids,xlab = "Fitted Values",ylab="Studentized Deleted Residuals")
+abline(lm(stud.del.resids~fit02$fitted.values),col="red")
+```
+
+There appears to be heteroskedasticity in the model, as it looks like there is less residual on the high end of the fitted values.  There is potentially some shape to the Studentized Deleted Residuals, but I cannot determine what that is from just looking at the plot.
+
+#### Added Variable Plots
+```{r,fig.height=10,fig.width=10}
+avPlots(fit02)
+```
+
+Added-Variable Plots give us a more clear picture of how each independent variable affects the regression model. The more closely the regression line follows the apparent shape of the plot is how closely correlated the variables are, given else. Most of the plots appear to show little linear effect on the regression model, however there are some that appear quite linear in nature. Some prime examples of linear effect are HappinessCV, LogGDPPC:HappinessSD, and LodGDPPC:HappinessCV.
+
+#### Residual Box Plot
+```{r,fig.height=6}
+boxplot(fit02$residuals)
+```
+
+The box plot of the residuals appears to show that the residuals are close to normal.
+
+```{r,fig.height=6}
+plot(dataset2$year,fit02$residuals,xlab = "Survey Year",ylab="Residuals")
+abline(0,0,col="red")
+abline(.005,0,col="red")
+abline(-.005,0,col="red")
+abline(.01,0,col="red")
+abline(-.01,0,col="red")
+abline(.015,0,col="red")
+abline(-.015,0,col="red")
+abline(.02,0,col="red")
+abline(-.02,0,col="red")
+```
+
+The residuals of each year appear to be roughly centered around zero, however the residuals of the latest four years appear to show increased variance when compared the the previous years. This indicates potential heteroskedasticity.
+
+```{r}
+bptest(fit02)
+```
+
+The purpose of this test is to confirm the existence of heteroskedasticity in the linear regression model. The null hypothesis is homoskedasticity of the model, and the alternative hypothesis is that the model is heteroskedastic. With an alpha confidence level of .99, we can reject the null hypothesis with a p-value of < 2.2e-16. 
+
+We therefore conclude that there is heteroskedasticity in the linear regression model. The variance of the errors in our model is not independent of the predictors.
+
+```{r,fig.height=5}
+plot(bcAVGHappiness1,fit02$residuals, main = "Constant Variance Check", xlab = "Transformed AVGHappiness", ylab = "Residuals")
+abline(0,0,col="red")
+```
+
+Reviewing the plot above supports the finding that there is heteroskedasticity in the model.
+
+## Response Variable vs Fitted Values
+
+```{r,fig.height=6}
+plot(bcAVGHappiness1,fit02$fitted.values,ylab = "Fitted Values",xlab = "BC Transformed Response Variable")
+abline(0,1,col="red")
+```
+
+There is no visible curvature, and the points of the plot are all relatively close to the regression line. This means that the regression model is likely a good fit for the data.
+
+## Influence Analysis
+
+```{r}
+inffit <- influencePlot(fit02)
+```
+
+The plot above takes three different statistics into account; hat values are on the x axis, studentized residuals on the y, and the radius of the circle for each point is the point's leverage (or hat matrix diagonals). The larger a data point's circle, the greater its influence on the regression model. The plot above shows us that the most influential points are >2sd or <-2sd.
+
+```{r}
+plot(fit02$fitted.values, hatvalues(fit02),xlab = "Fitted Values",ylab = "Leverage")
+plot(fit02$fitted.values, dffits(fit02),xlab = "Fitted Values",ylab = "DFFITS")
+plot(fit02$fitted.values, cooks.distance(fit02),xlab = "Fitted Values",ylab = "Cook's Distance")
+```
+
+The three preceding plots all tell us essentiall the same thing. The vast majority of the data points have little influence on the regression model, but there are enough points that are extremely close to the fitted value that the couple dozen values that fit the model worse have a small effect, even with the higher leverage of the ill-fitting points. Even though these plots tell us that some points are potentially lessening the model's precision, the r-squared value is high enough that no action is needed.
+
+# Interpretation
+## Parameters
+
+The following parameters are included in the final regression model:
+
+AVGHappiness^-.675 : This is the dependent variable transformed by a box cox value of -.675. This variable represents the average national happiness level from a survery.
+
+LogGDPPC : This is the log transformed Gross Domestic Product per Capita for the country in the year of the survey. This predictor is the most significant single predictor of the independent variable. There is a positive linear relationship between GDPPC and a nation's (transformed) happiness with the model estimating the relationship to be 0.0245117.
+
+SocialSupport : There is a positive relationship between the amount of social support a country, on average, feels they receive from their peers and the average happiness level in that country. The model estimates the relationship with the transformed response to be 0.1575643.
+
+AVGIsCorrupt : The more corrupt a nation's populace perceives their government to be, the less happy they are. The model estimates the relationship with the transformed response to be -0.1066589.
+
+HappinessSD : This is the standard deviation of the AVGHappiness for the year in question. The model estimates the relationship with the transformed response to be 0.2612937.
+
+HappinessCV : This is the coefficient of variation of the AVGHappiness for the year in question. The model estimates the relationship with the transformed response to be -0.9019550. This is almost a prefect negative linear relationship, and by far the most linear relationship in the model. This indicates that the more variance there is in the happiness of a country's population, the lower the average happiness will be. 
+
+### Interactions
+
+There are 10 interactions between the predictors that made it into the final model. Of these, only one is not significant at the .99 level. This means that there is a significant statistical relationship between almost all of the predictors.
+
+## Predictions
+
+```{r}
+pmatrix <- predict(fit02,interval='prediction',level=.95)
+cmatrix <- predict(fit02,interval='confidence',level=.95)
+
+randlist <- sample(1:1231, 3, replace=FALSE)
+randlist <- c(985, 477, 208) #this line is used to override the random selection from the previous line. only used for knit purposes.
+predictions <- pmatrix[c(randlist),]
+confidences <- cmatrix[c(randlist),]
+```
+
+I used the sample function to randomly select 3 rows from the model's predictions and confidence intervals and will analyze them below.
+
+### Prediction Intervals
+```{r}
+predictions
+```
+
+### Confidence Intervals
+```{r}
+confidences
+```
+
+### Data
+```{r}
+preddata <- dataset2[c(985,477,208),c(1,2,3,4,5,9,12,13)]
+preddata$AVGHappiness <- bcPower(preddata$AVGHappiness,-.675)
+names(preddata)[3] <- "TransformedAVGHappiness"
+preddata
+SE1 <- ((preddata$TransformedAVGHappiness[1] - (predictions[1,1]))^2)
+SE2 <- ((preddata$TransformedAVGHappiness[2] - (predictions[2,1]))^2)
+SE3 <- ((preddata$TransformedAVGHappiness[3] - (predictions[3,1]))^2)
+```
+
+### 985 - Columbia, 2016
+
+The response is within the .95 confidence limit for the prediction, and the range of the confidence is very small, which shows us that the model is accurate with respect to this point. The SE for this point is `r SE1`.
+
+### 447 - Armenia, 2013
+
+The response is not within the .95 confidence limit for the prediction, which shows us that the model is not accurate with respect to this point. The SE for this point is `r SE2`.
+
+### 208 - Russia, 2014
+
+The response is within the .95 confidence limit for the prediction, and the range of the confidence is very small, which shows us that the model is accurate with respect to this point. The SE for this point is `r SE3`.

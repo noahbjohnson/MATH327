@@ -1,0 +1,404 @@
+---
+title: "MATH327 Project 2"
+author: "Noah B Johnson"
+date: "12/10/2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+# Analysis of Income Bracket Data with Logistic Regression
+## Noah B Johnson, Data Science, Luther College
+## Math 327, Dr. Philip Iverson
+
+
+*Library Import Statements*
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(readr)
+library(ggplot2)
+library(leaps)
+library(pscl)
+library(car)
+library(lmtest)
+library(DescTools)
+library(rcompanion)
+library(pROC)
+library(arm)
+```
+
+<!-- Setup and cleaning -->
+
+# Setup and Cleaning
+```{r import}
+# Import the test and training datasets
+nameslist = c("age","workclass","X1","education","education-num","marital-status","occupation","relationship","race","sex","capital-gain","capital-loss","hours-per-week","native-country","over50k")
+training <- read_csv("data/training.csv", 
+    col_names = FALSE, skip = 1)
+test <- read_csv("data/test.csv", 
+    col_names = FALSE, skip = 1)
+
+# Set the names of the variables to those from the readme
+names(training) = nameslist
+names(test) = nameslist
+# Remove the name list
+remove(nameslist)
+
+# Remove columns that will not be used
+training$X1 = NULL
+test$X1 = NULL
+test$`capital-gain` = NULL
+test$`capital-loss` = NULL
+training$`capital-gain` = NULL
+training$`capital-loss` = NULL
+```
+
+```{r cleaning}
+# Replace the ? placeholder with NA
+is.na(training) <- training == "?"
+is.na(test) <- test == "?"
+# Remove all records with NAs
+training <- training[complete.cases(training),]
+test <- test[complete.cases(test),]
+# Fix typo in test response
+trainpositive <- training$over50k == ">50K"
+training$over50k[trainpositive] <- 1
+training$over50k[!trainpositive] <- 0
+testpositive <- test$over50k == ">50K."
+test$over50k[testpositive] <- 1
+test$over50k[!testpositive] <- 0
+```
+
+The dataset has been imported and the missing data points have all been standardized. 
+
+```{r factoring}
+# Create new dataframes with factored variables
+f.training <- data.frame(training$age,factor(training$workclass),factor(training$education),training$`education-num`,factor(training$`marital-status`),factor(training$occupation),factor(training$relationship),factor(training$race),factor(training$sex),training$`hours-per-week`,factor(training$`native-country`),factor(training$over50k))
+names(f.training) <- names(training)
+f.test <- data.frame(test$age,factor(test$workclass),factor(test$education),test$`education-num`,factor(test$`marital-status`),factor(test$occupation),factor(test$relationship),factor(test$race),factor(test$sex),test$`hours-per-week`,factor(test$`native-country`),factor(test$over50k))
+names(f.test) <- names(test)
+
+# Copy factored dataframes to original data names
+test <- f.test
+training <- f.training
+
+# Remove f. data frames
+remove(f.test)
+remove(f.training)
+```
+
+Categorical variables have been defines as "factors" for R processing.
+
+# Introduction
+
+The purpose of this analysis is to build a model that can accurately determine if someone's income is over $50,000 or under/equal. The data used in this analysis was downloaded from the website data.world as a complete package including a training set and test set. (original attribution is at the end of this document) The data was originally obtained from the US census bureau and includes information about employment, education, and demographics. The variables are defined below.
+
+**workclass:** Class of employer (private, self-employed, state gov., federal gov.)
+**education:** Highest level of education completed
+**marital-status:** Married, never married, separated, divorced
+**occupation:** The general industry of occupation (Sales, craftsman, manager/executive...)
+**relationship:** Family role
+**race:** Self-identified race
+**sex:** Self-identified sex
+**hours-per-week:** Number of hours worked on the average week
+**over50k:** **(response)** 1 = income > 50,000/yr, 0 = <= 50,000/yr
+
+
+<!-- Preliminary analysis -->
+
+# Preliminary Analysis
+
+## Variable Histograms
+```{r histograms}
+ggplot(data = training,aes(x=training$age)) +
+ xlab("Age") +
+  ylab("Count") +
+ coord_flip() +
+  geom_bar()
+ggplot(data = training,aes(x=training$workclass)) +
+ xlab("Work Class") +
+  ylab("Count") +
+ coord_flip() +
+  geom_bar()
+ggplot(data = training,aes(x=training$education)) +
+ xlab("Education Level") +
+  ylab("Count") +
+ coord_flip() +
+  geom_bar()
+ggplot(data = training,aes(x=training$`education-num`)) +
+ xlab("Education Number") +
+  ylab("Count") +
+ coord_flip() +
+  geom_bar()
+ggplot(data = training,aes(x=training$`marital-status`)) +
+ xlab("Marital Status") +
+  ylab("Count") +
+ coord_flip() +
+  geom_bar()
+ggplot(data = training,aes(x=training$occupation)) +
+ xlab("Occupation") +
+  ylab("Count") +
+ coord_flip() +
+  geom_bar()
+ggplot(data = training,aes(x=training$relationship)) +
+ xlab("Relationship") +
+  ylab("Count") +
+ coord_flip() +
+  geom_bar()
+ggplot(data = training,aes(x=training$race)) +
+ xlab("Race") +
+  ylab("Count") +
+ coord_flip() +
+  geom_bar()
+ggplot(data = training,aes(x=training$sex)) +
+ xlab("Sex") +
+  ylab("Count") +
+ coord_flip() +
+  geom_bar()
+ggplot(data = training,aes(x=training$`hours-per-week`)) +
+ xlab("Hours Per Week") +
+  ylab("Count") +
+ coord_flip() +
+  geom_bar()
+ggplot(data = training,aes(x=training$`native-country`)) +
+ xlab("Native Country") +
+  ylab("Count") +
+ coord_flip() +
+  geom_bar()
+ggplot(data = training,aes(x=training$over50k)) +
+ xlab("Over 50k/year") +
+  ylab("Count") +
+ coord_flip() +
+  geom_bar()
+```
+
+## Variable Summaries
+```{r variable-summaries}
+summary(training)
+```
+
+<!-- First Model -->
+
+# First Order Model
+
+```{r fit1}
+fit1 <- glm(over50k ~.,family=binomial(link='logit'),data=training)
+summary(fit1)
+```
+
+```{r remove-variables}
+# Nationality is not very significant and is a pain due to categories
+test$`native-country` <- NULL
+training$`native-country` <- NULL
+
+# education-num is throwing an error and is a reapeat of education
+test$`education-num` <- NULL
+training$`education-num` <- NULL
+```
+
+The first order model improves upon the accuracy of the null model by over 30%, but there are some duplicate predictors, and many variables appear to be insignificant.
+
+Nationality and education-num are removed as variables. education-num is a duplicate variable, and native-country is poorly distributed and difficult to draw conclusions from.
+
+```{r fit2}
+fit2 <- glm(over50k ~.,family=binomial(link='logit'),data=training)
+summary(fit2)
+```
+
+The model without native-country and education-num is much cleaner and easier to analyze.
+
+<!-- Model Selection -->
+
+# Model Selection
+
+
+## Steps
+```{r steps}
+# empty regression model
+model.null = glm(over50k ~ 1,
+                 data=training,
+                 family = binomial(link="logit")
+                 )
+
+# full regression model
+model.full = glm(over50k ~ .,
+                 data=training,
+                 family = binomial(link="logit")
+                 )
+    
+step(model.null,
+     scope = list(upper=model.full),
+             direction="both",
+             test="Chisq",
+             data=Data)
+```
+
+```{r establish-best-fit}
+# Best model has all predictors in it, same as fit2
+fit <- fit2
+```
+
+Bidirectional stepping using the AIC criterion has determined that the best model is model.full, which contains all of the variables.
+
+## Final Model
+```{r final model}
+summary(fit)
+anova(fit)
+```
+
+<!-- Model Diagnostics -->
+
+# Model Diagnostics
+
+## ANOVA
+
+```{r anova}
+Anova(fit, type="II", test="Wald")
+anova(fit, test="Chisq")
+```
+
+The analysis of deviance table indicates that all of the variables are significant at the .01 level. 
+
+## Pseudo-R^2
+
+```{r McFaddens-pseudo-R2}
+R2 <- pR2(fit)
+rsquared <- R2[4]
+names(rsquared) <- NULL
+nagelkerke(fit)
+```
+
+Pseudo-R2 values derived from the model indicate a decent fit.
+
+## P-value from chi-squared
+
+```{r p-value}
+anova(fit,
+      model.null,
+      test="Chisq")
+lrtest(fit)
+```
+
+The Chi-Squared test indicates a good fit for the model. The deviance of the residuals is 12331, and the p-value is highly significant even at the .001 level.
+
+## Residuals plots
+
+```{r standard-residuals}
+plot(fitted(fit),
+     rstandard(fit))
+```
+
+Plotting the standard residuals against the fitted value indicates some bias, but there are no obvious outliers.
+
+```{r}
+binnedplot(fit$fitted.values,fit$residuals)
+```
+
+The binned residual plot is a better indicator in this case. To indicate good fit, about 95% of the values should fit within the gray lines on the plot, and this is the case.
+
+```{r}
+plot(fit)
+```
+
+The model plots above do not make any highly-influential observations apparent.
+
+<!-- Conclusion -->
+
+# Conclusion
+
+```{r fitted-results}
+fitted.results <- predict(fit,newdata=training)
+```
+
+```{r ROC}
+rocmodel <- roc(training$over50k,fitted.results)
+pROC::plot.roc(rocmodel,print.thres = TRUE,print.auc = TRUE,main = "ROC Curve")
+```
+
+```{r test-accuracy}
+test.results <- predict(fit,newdata=test)
+fitted.results.binary <- ifelse(test.results > -1.091,1,0)
+misClasificError <- mean(fitted.results.binary != test$over50k)
+print(paste('Accuracy',1-misClasificError))
+```
+
+Observation of the ROC curve indicates a threshold of -1.091 for highest overall accuracy. Using this threshold on our test dataset results in determining, with 78.62% accuracy if an individual has above or below $50,000/yr in income. Finding over 75% accuracy with the test set indicates that the model can be applied to new observations without losing much integrity.
+
+
+
+
+
+### Attribution
+
+| This data was extracted from the census bureau database found at
+| http://www.census.gov/ftp/pub/DES/www/welcome.html
+| Donor: Ronny Kohavi and Barry Becker,
+|        Data Mining and Visualization
+|        Silicon Graphics.
+|        e-mail: ronnyk@sgi.com for questions.
+| Split into train-test using MLC++ GenCVFiles (2/3, 1/3 random).
+| 48842 instances, mix of continuous and discrete    (train=32561, test=16281)
+| 45222 if instances with unknown values are removed (train=30162, test=15060)
+| Duplicate or conflicting instances : 6
+| Class probabilities for adult.all file
+| Probability for the label '>50K'  : 23.93% / 24.78% (without unknowns)
+| Probability for the label '<=50K' : 76.07% / 75.22% (without unknowns)
+|
+| Extraction was done by Barry Becker from the 1994 Census database.  A set of
+|   reasonably clean records was extracted using the following conditions:
+|   ((AAGE>16) && (AGI>100) && (AFNLWGT>1)&& (HRSWK>0))
+|
+|
+|
+|
+|
+|
+| Conversion of original data as follows:
+| 1. Discretized agrossincome into two ranges with threshold 50,000.
+| 2. Convert U.S. to US to avoid periods.
+| 3. Convert Unknown to "?"
+| 4. Run MLC++ GenCVFiles to generate data,test.
+|
+| Description of fnlwgt (final weight)
+|
+| The weights on the CPS files are controlled to independent estimates of the
+| civilian noninstitutional population of the US.  These are prepared monthly
+| for us by Population Division here at the Census Bureau.  We use 3 sets of
+| controls.
+|  These are:
+|          1.  A single cell estimate of the population 16+ for each state.
+|          2.  Controls for Hispanic Origin by age and sex.
+|          3.  Controls by Race, age and sex.
+|
+| We use all three sets of controls in our weighting program and "rake" through
+| them 6 times so that by the end we come back to all the controls we used.
+|
+| The term estimate refers to population totals derived from CPS by creating
+| "weighted tallies" of any specified socio-economic characteristics of the
+| population.
+|
+| People with similar demographic characteristics should have
+| similar weights.  There is one important caveat to remember
+| about this statement.  That is that since the CPS sample is
+| actually a collection of 51 state samples, each with its own
+| probability of selection, the statement only applies within
+| state.
+
+
+>50K, <=50K.
+
+age: continuous.
+workclass: Private, Self-emp-not-inc, Self-emp-inc, Federal-gov, Local-gov, State-gov, Without-pay, Never-worked.
+fnlwgt: continuous.
+education: Bachelors, Some-college, 11th, HS-grad, Prof-school, Assoc-acdm, Assoc-voc, 9th, 7th-8th, 12th, Masters, 1st-4th, 10th, Doctorate, 5th-6th, Preschool.
+education-num: continuous.
+marital-status: Married-civ-spouse, Divorced, Never-married, Separated, Widowed, Married-spouse-absent, Married-AF-spouse.
+occupation: Tech-support, Craft-repair, Other-service, Sales, Exec-managerial, Prof-specialty, Handlers-cleaners, Machine-op-inspct, Adm-clerical, Farming-fishing, Transport-moving, Priv-house-serv, Protective-serv, Armed-Forces.
+relationship: Wife, Own-child, Husband, Not-in-family, Other-relative, Unmarried.
+race: White, Asian-Pac-Islander, Amer-Indian-Eskimo, Other, Black.
+sex: Female, Male.
+capital-gain: continuous.
+capital-loss: continuous.
+hours-per-week: continuous.
+native-country: United-States, Cambodia, England, Puerto-Rico, Canada, Germany, Outlying-US(Guam-USVI-etc), India, Japan, Greece, South, China, Cuba, Iran, Honduras, Philippines, Italy, Poland, Jamaica, Vietnam, Mexico, Portugal, Ireland, France, Dominican-Republic, Laos, Ecuador, Taiwan, Haiti, Columbia, Hungary, Guatemala, Nicaragua, Scotland, Thailand, Yugoslavia, El-Salvador, Trinadad&Tobago, Peru, Hong, Holand-Netherlands.

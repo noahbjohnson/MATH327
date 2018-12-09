@@ -1,0 +1,391 @@
+---
+title: 'MATH327 - Player Unknown''s Battleground: Solo Rating Linear Analysis'
+author: "Mohammed Al Jardat, Collin Carpenter"
+date: "11/13/2017"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+#set default for all chunks to echo FALSE
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r}
+#set working directory and import file
+# setwd("")
+library(readxl)
+#original data is called playerdata
+playerdata <- read_excel("PUBGDataSet.xlsx", sheet = "Sheet1", na = "null")
+```
+
+```{r}
+#create a scaled/normalized (0-1) version of playerdata named "normaldata" exclude the tracker_id column
+normalit<-function(m){
+     (m - min(m))/(max(m)-min(m))
+}
+normaldata <- apply(playerdata,2,normalit)
+
+
+#change column names in normaldata to numbers for ease of use and bias,
+colnames(normaldata) <- c("track","var1","var2","var3","var4","var5","var6","var7","var8")
+#create a data frame named nkey that contains the name assignments for reference later on
+nkey <- data.frame(colnames(playerdata),c("track","var1","var2","var3","var4","var5","var6","var7","var8"))
+```
+
+```{r}
+#made both sets of data matrices so they play nicely together
+playermatrix <- data.matrix(playerdata, rownames.force = NA)
+normalmatrix <- data.matrix(normaldata, rownames.force = NA)
+```
+In the videogame Player Unkown's Battleground, players compete in a free for all battle arena that takes the form of a pair of islands surrounded by a vast ocean. Players are scattered throughout the island and must search the various buildings and facilities on the islands for weapons and gear that can be used to help survive the battle. Each player will have a rating based upon how well they do in a vareity of different aspects. The purpose of our analysis is to determine if there is a statistical correlation we can draw from this player data that will help us determine what seperates the different players in terms of solo rating. 
+
+# Normalization of the data
+### We normalized the data to [0,1] range and plotted the normalized values against the original values to double check that normalization worked
+```{r,fig.height=3.5, fig.width=6}
+par (mfrow = c(1,2))
+#check that the data is correctly normalized
+plot(playermatrix[,2],normalmatrix[,2],xlab=nkey[2,1], ylab=nkey[2,2])
+plot(playermatrix[,3],normalmatrix[,3],xlab=nkey[3,1], ylab=nkey[3,2])
+plot(playermatrix[,4],normalmatrix[,4],xlab=nkey[4,1], ylab=nkey[4,2])
+plot(playermatrix[,5],normalmatrix[,5],xlab=nkey[5,1], ylab=nkey[5,2])
+plot(playermatrix[,6],normalmatrix[,6],xlab=nkey[6,1], ylab=nkey[6,2])
+plot(playermatrix[,7],normalmatrix[,7],xlab=nkey[7,1], ylab=nkey[7,2])
+plot(playermatrix[,8],normalmatrix[,8],xlab=nkey[8,1], ylab=nkey[8,2])
+plot(playermatrix[,9],normalmatrix[,9],xlab=nkey[9,1], ylab=nkey[9,2])
+```
+
+# Check the Distribution of each variable
+```{r,fig.height=3.5, fig.width=6}
+par (mfrow = c(1,2))
+#distribution of each variable
+hist(normalmatrix[,2], breaks=25, xlab = "Histogram of solo_Rating")
+hist(normalmatrix[,3], breaks=25, xlab = "Histogram of solo_WinRatio")
+hist(normalmatrix[,4], breaks=25, xlab = "Histogram of solo_KillDeathRatio")
+hist(normalmatrix[,5], breaks=25, xlab = "Histogram of solo_RoundsPlayed")
+hist(normalmatrix[,6], breaks=25, xlab = "Histogram of solo_MoveDistancePg")
+hist(normalmatrix[,7], breaks=25, xlab = "Histogram of solo_DamagePg")
+hist(normalmatrix[,8], breaks=25, xlab = "Histogram of solo_KillsPg")
+hist(normalmatrix[,9], breaks=25, xlab = "Histogram of solo_AvgSurvivalTime")
+```
+
+# Distribution of each variable with log transformation
+### vars: 2, 3, 4, & 7 appear to be normally distributed when log transformed
+```{r, out.width = '250px', dpi=200}
+#distribution of each variable
+hist(log(normalmatrix[,2]), breaks=25, xlab = "Histogram of Log.solo_Rating.nrm")
+hist(log(normalmatrix[,3]), breaks=25, xlab = "Histogram of Log.WinRatio.nrm")
+hist(log(normalmatrix[,4]), breaks=25, xlab = "Histogram of Log.KillDeathRatio.nrm")
+hist(log(normalmatrix[,5]), breaks=25, xlab = "Histogram of Log.RoundsPlayed.nrm")
+hist(log(normalmatrix[,6]), breaks=25, xlab = "Histogram of Log.MoveDistancePg.nrm")
+hist(log(normalmatrix[,7]), breaks=25, xlab = "Histogram of Log.DamagePg.nrm")
+hist(log(normalmatrix[,8]), breaks=25, xlab = "Histogram of Log.KillsPg.nrm")
+hist(log(normalmatrix[,9]), breaks=25, xlab = "Histogram of Log.AvgSurvivalTime.nrm")
+```
+# There are 0.0000 values in ~200 cells of the 90000 element normalmatrix. Loss of data deemed acceptable.
+
+# Distribution of each variable with square root transformation
+### Vars: 5 & 6 look more normally distributed with square root transformation
+```{r, out.width = '250px', dpi=200}
+#distribution of each variable
+hist(sqrt(normalmatrix[,2]), breaks=25, xlab = "Histogram of Sqrt.solo_Rating.nrm")
+hist(sqrt(normalmatrix[,3]), breaks=25, xlab = "Histogram of Sqrt.WinRatio.nrm")
+hist(sqrt(normalmatrix[,4]), breaks=25, xlab = "Histogram of Sqrt.KillDeathRatio.nrm")
+hist(sqrt(normalmatrix[,5]), breaks=25, xlab = "Histogram of Sqrt.RoundsPlayed.nrm")
+hist(sqrt(normalmatrix[,6]), breaks=25, xlab = "Histogram of Sqrt.MoveDistancePg.nrm")
+hist(sqrt(normalmatrix[,7]), breaks=25, xlab = "Histogram of Sqrt.DamagePg.nrm")
+hist(sqrt(normalmatrix[,8]), breaks=25, xlab = "Histogram of Sqrt.KillsPg.nrm")
+hist(sqrt(normalmatrix[,9]), breaks=25, xlab = "Histogram of Sqrt.AvgSurvivalTime.nrm")
+```
+
+```{r}
+#transform the variables based on their best transformation
+# LOG: 2, 3, 4, & 7
+# SQRT: 5 & 6
+# NONE: track, 1, 8
+tracktrans <- normalmatrix[,1]
+solo_rating.mtrx <- normalmatrix[,2]
+solo_WinRatio.mtrx <- log(normalmatrix[,3])
+solo_KillDeathRatio.mtrx <- log(normalmatrix[,4])
+solo_RoundsPlayed.mtrx <- log(normalmatrix[,5])
+solo_MoveDistancePg.mtrx <- sqrt(normalmatrix[,6])
+solo_DamagePg.mtrx <- sqrt(normalmatrix[,7])
+solo_KillsPg.mtrx <- log(normalmatrix[,8])
+solo_AvgSurvivalTime.mtrx <- normalmatrix[,9]
+
+#make a new matrix: transmatrix that contains the transformed values
+transmatrix <- data.matrix(data.frame(tracktrans,solo_rating.mtrx,solo_WinRatio.mtrx,solo_KillDeathRatio.mtrx,solo_RoundsPlayed.mtrx,solo_MoveDistancePg.mtrx,solo_DamagePg.mtrx,solo_KillsPg.mtrx,solo_AvgSurvivalTime.mtrx))
+transmatrix <- data.matrix(transmatrix[!rowSums(!is.finite(transmatrix)),])
+```
+
+# Histograms of transformed variables
+```{r}
+hist(solo_rating.mtrx, breaks=25, xlab = "Histogram of solo_Rating.nrm")
+hist(solo_WinRatio.mtrx, breaks=25, xlab = "Histogram of Log.solo_WinRatio.nrm")
+hist(solo_KillDeathRatio.mtrx, breaks=25, xlab = "Histogram of Log.solo_KillDeathRatio.nrm")
+hist(solo_RoundsPlayed.mtrx, breaks=25, xlab = "Histogram of Log.RoundsPlayed.nrm")
+hist(solo_MoveDistancePg.mtrx, breaks=25, xlab = "Histogram of Sqrt.MoveDistancePg.nrm")
+hist(solo_DamagePg.mtrx, breaks=25, xlab = "Histogram of Sqrt.DamagePg.nrm")
+hist(solo_KillsPg.mtrx, breaks=25, xlab = "Histogram of Log.KillsPg.nrm")
+hist(solo_AvgSurvivalTime.mtrx, breaks=25, xlab = "Histogram of solo_AvgSurvivalTime.nrm")
+```
+
+
+```{r}
+#create linear regression models for each independent var and the dependent var
+solo_Rating = normalmatrix[,2]
+solo_WinRatio = normalmatrix[,3]
+solo_KillDeathRatio = normalmatrix[,4]
+solo_RoundsPlayed = normalmatrix[,5]
+solo_MoveDistancePg = normalmatrix[,6]
+solo_DamagePg = normalmatrix[,7]
+solo_KillsPg = normalmatrix[,8]
+solo_AvgSurvivalTime = normalmatrix[,9]
+
+
+
+
+
+fitvar2 <- lm(solo_Rating ~ solo_WinRatio)
+fitvar3 <- lm(solo_Rating ~ solo_KillDeathRatio)
+fitvar4 <- lm(solo_Rating ~ solo_RoundsPlayed)
+fitvar5 <- lm(solo_Rating ~ solo_MoveDistancePg)
+fitvar6 <- lm(solo_Rating ~ solo_DamagePg )
+fitvar7 <- lm(solo_Rating ~ solo_KillsPg)
+fitvar8 <- lm(solo_Rating ~ solo_AvgSurvivalTime)
+
+#create a multiple linear regression model with all of the independent variables
+fitmultiple <- lm(solo_Rating ~ solo_WinRatio + solo_KillDeathRatio + solo_RoundsPlayed + solo_MoveDistancePg + solo_DamagePg + solo_KillsPg  + solo_AvgSurvivalTime)
+
+#fitmultiple
+#confint(fitmultiple, level = .95)
+#summary(fitmultiple)
+#cor(normalmatrix)
+```
+# Summary of Multiple Regression for non-transformed variables
+```{r}
+summary(fitmultiple)
+```
+First order model does not look very promising with an adjusted R-squared value of .3992. Future transformations will hopefully increase this value.
+
+# Correlation Matrix for non-transformed variables
+```{r}
+cor(normalmatrix)
+```
+
+# Scatter plot of solo_Rating vs each non-transformed variable
+```{r, out.width = '250px', dpi=200}
+plot(solo_WinRatio,solo_Rating)
+plot(solo_KillDeathRatio,solo_Rating)
+plot(solo_RoundsPlayed,solo_Rating)
+plot(solo_MoveDistancePg,solo_Rating)
+plot(solo_DamagePg,solo_Rating)
+plot(solo_KillsPg,solo_Rating)
+plot(solo_AvgSurvivalTime,solo_Rating)
+```
+
+```{r}
+#create linear regression models for the transformed variables
+#tracktrans <- normalmatrix[,1]
+#var1trans <- normalmatrix[,2]
+#var2trans <- log(normalmatrix[,3])
+#var3trans <- log(normalmatrix[,4])
+#var4trans <- log(normalmatrix[,5])
+#var5trans <- sqrt(normalmatrix[,6])
+#var6trans <- sqrt(normalmatrix[,7])
+#var7trans <- log(normalmatrix[,8])
+#var8trans <- normalmatrix[,9]
+
+solo_Rating.nrm = transmatrix[,2]
+Log.solo_WinRatio.nrm = transmatrix[,3]
+Log.solo_KillDeathRatio.nrm = transmatrix[,4]
+Log.solo_RoundsPlayed.nrm = transmatrix[,5]
+Sqrt.solo_MoveDistancePg.nrm = transmatrix[,6]
+Sqrt.solo_DamagePg.nrm = transmatrix[,7]
+Log.solo_KillsPg.nrm = transmatrix[,8]
+solo_AvgSurvivalTime.nrm = transmatrix[,9]
+
+fitvar2trans <- lm(solo_Rating.nrm ~ Log.solo_WinRatio.nrm)
+fitvar3trans <- lm(solo_Rating.nrm ~ Log.solo_KillDeathRatio.nrm)
+fitvar4trans <- lm(solo_Rating.nrm ~ Log.solo_RoundsPlayed.nrm)
+fitvar5trans <- lm(solo_Rating.nrm ~ Sqrt.solo_MoveDistancePg.nrm)
+fitvar6trans <- lm(solo_Rating.nrm ~ Sqrt.solo_DamagePg.nrm)
+fitvar7trans <- lm(solo_Rating.nrm ~ Log.solo_KillsPg.nrm)
+fitvar8trans <- lm(solo_Rating.nrm ~ solo_AvgSurvivalTime.nrm)
+
+#create a multiple linear regression model with the transformed variables
+fitmultipletrans <- lm(solo_Rating.nrm ~ Log.solo_WinRatio.nrm + Log.solo_KillDeathRatio.nrm +  Log.solo_RoundsPlayed.nrm + Sqrt.solo_MoveDistancePg.nrm + Sqrt.solo_DamagePg.nrm + Log.solo_KillsPg.nrm + solo_AvgSurvivalTime.nrm)
+
+#fitmultipletrans
+#confint(fitmultipletrans, level = .95)
+#summary(fitmultipletrans)
+#cor(transmatrix)
+```
+# Summary of Multiple Regression for transformed variables
+```{r}
+summary(fitmultipletrans)
+```
+After several transofrmations on the predictors, our Adjusted R-squared is now sitting at a relatively pleasing .6689. Even further manipulation of the data may allow us to tweek this value a bit.
+
+# Dropping the least significant variable transmatrix Sqrt.solo_DamagePg.nrm. 
+```{r}
+fitmultipletrans = lm(solo_Rating.nrm ~ Log.solo_WinRatio.nrm + Log.solo_KillDeathRatio.nrm +  Log.solo_RoundsPlayed.nrm + Sqrt.solo_MoveDistancePg.nrm + Log.solo_KillsPg.nrm + solo_AvgSurvivalTime.nrm)
+```
+
+# Correlation Matrix for transformed variables
+```{r,fig.height=3.5, fig.width=6}
+cor(transmatrix)
+pairs(transmatrix)
+pairs(transmatrix[,1:6])
+pairs(transmatrix[,6:9])
+```
+curvilinear relationship between Win Ratio and KDR, solo_rating and Rounds Played. Clear patterns hard to distinquish via visual analysis alone. Further plotting and statistical analysis is required.
+# Scatter plot of solo_rating vs each transformed variable
+```{r,fig.height=3.5, fig.width=6}
+plot(solo_WinRatio.mtrx,solo_rating.mtrx )
+plot(solo_KillDeathRatio.mtrx,solo_rating.mtrx)
+plot(solo_RoundsPlayed.mtrx,solo_rating.mtrx)
+plot(solo_MoveDistancePg.mtrx,solo_rating.mtrx)
+plot(solo_DamagePg.mtrx,solo_rating.mtrx)
+plot(solo_AvgSurvivalTime.mtrx,solo_rating.mtrx)
+```
+# MoveDistancePg has an odd shape due to the nature of the game. As some players will often die from the very ofset of the game in a Hunger Games-esque battle arena.
+# Normal Q-Q plots of the transformed data
+```{r,fig.height=3.5, fig.width=6}
+Resid.Log.solo_WinRatio.nrm = resid(fitvar2trans)
+Resid.Log.solo_KillDeathRatio.nrm = resid(fitvar3trans)
+Resid.Log.solo_RoundsPlayed.nrm = resid(fitvar4trans)
+Resid.Sqrt.solo_MoveDistancePg.nrm = resid(fitvar5trans)
+Resid.Log.solo_KillsPg.nrm = resid(fitvar6trans)
+Resid.solo_AvgSurvivalTime.nrm = resid(fitvar7trans)
+
+qqnorm(Resid.Log.solo_WinRatio.nrm,main = 'Log.solo_WinRatio.nrm' )
+qqnorm(Resid.Log.solo_KillDeathRatio.nrm,main='Log.solo_KillDeathRatio.nrm')
+qqnorm(Resid.Log.solo_RoundsPlayed.nrm,main='Log.solo_RoundsPlayed.nrm')
+qqnorm(Resid.Sqrt.solo_MoveDistancePg.nrm,main ='Sqrt.solo_MoveDistancePg.nrm')
+qqnorm(Resid.Log.solo_KillsPg.nrm,main='Log.solo_KillsPg.nrm')
+qqnorm(Resid.solo_AvgSurvivalTime.nrm,main='solo_AvgSurvivalTime.nrm')
+
+boxplot(Resid.Log.solo_WinRatio.nrm)
+boxplot(Resid.Log.solo_KillDeathRatio.nrm)
+boxplot(Resid.Log.solo_RoundsPlayed.nrm)
+boxplot(Resid.Sqrt.solo_MoveDistancePg.nrm)
+boxplot(Resid.Log.solo_KillsPg.nrm)
+boxplot(Resid.solo_AvgSurvivalTime.nrm)
+library (leaps)
+fitmultipletrans.leaps = leaps (x = transmatrix[,c(3:6,8:9)], 
+                    y = transmatrix[,2],
+                    names = names(transmatrix)[c(3:6,8:9)], method="Cp")
+fitmultipletrans.summ = summary (fitmultipletrans)
+fitmultipletrans.mse = fitmultipletrans.summ$sigma^2
+n = length (solo_Rating.nrm)
+fitmultipletrans.best = cbind.data.frame (fitmultipletrans.leaps$size, fitmultipletrans.leaps$Cp, fitmultipletrans.leaps$which)
+names (fitmultipletrans.best ) [1:2] = c("size", "Cp")
+
+fitmultipletrans.best$SSEp = fitmultipletrans.mse * (fitmultipletrans.best$Cp + (n - 2*fitmultipletrans.best$size))
+fitmultipletrans.best$AIC = n * log (fitmultipletrans.best$SSEp) - n * log (n) + 2 * fitmultipletrans.best$size
+fitmultipletrans.best$SBC = n * log (fitmultipletrans.best$SSEp) - n * log (n) + log (n) * fitmultipletrans.best$size
+
+fitmultipletrans.best[fitmultipletrans.best$SBC == min (fitmultipletrans.best$SBC),]
+best.SBC = lm(solo_Rating.nrm ~ Log.solo_WinRatio.nrm + Log.solo_RoundsPlayed.nrm + Sqrt.solo_MoveDistancePg.nrm + Log.solo_KillsPg.nrm + solo_AvgSurvivalTime.nrm)
+```
+# SBC criterion suggests that we disclude Log.solo_KillDeathRatio.nrm but retain the remaining predictors
+```{r,fig.height=3.5, fig.width=6}
+library(corrplot)
+cormat = cor(transmatrix[,2:9], use = "complete.obs")
+round(cormat, 2)
+corrplot(cormat, method="ellipse")
+summary(fitmultipletrans)
+```
+There appears to be a strong correlation between solo_rating and RoundsPlayed, KillDeathRatio and WinRatio,etc. With a strong negative correlation between WinRatio and RoundsPlayed, which makes complete sense give one of the two is a ratio between games won vs games played.The correlation between MoveDistance and SurvivalTime is expected as well, as not only are the players going to be alive if they are moving around, as the game progresses, the remaining players are forced ever closer together.
+```{r}
+library("MASS")
+boxcox(best.SBC)
+Sqrt.solo_Rating.nrm = sqrt(solo_Rating.nrm)
+best.SBC.bc = lm(Sqrt.solo_Rating.nrm ~ Log.solo_WinRatio.nrm + Log.solo_RoundsPlayed.nrm + Sqrt.solo_MoveDistancePg.nrm + Log.solo_KillsPg.nrm + solo_AvgSurvivalTime.nrm)
+plot(best.SBC.bc)
+step.Best.SBC.bc = step(best.SBC.bc,direction = "both")
+plot(step.Best.SBC.bc)
+
+summary(step.Best.SBC.bc)
+```
+```{r}
+my.center = function(x)(x-mean(x))
+
+Log.solo_WinRatio.nrm.c = my.center(Log.solo_WinRatio.nrm)
+Log.solo_RoundsPlayed.nrm.c = my.center(Log.solo_RoundsPlayed.nrm)
+Log.solo_KillsPg.nrm.c = my.center(Log.solo_KillsPg.nrm)
+Sqrt.solo_DamagePg.nrm.c = my.center(Sqrt.solo_DamagePg.nrm)
+Sqrt.solo_MoveDistancePg.nrm.c = my.center(Sqrt.solo_MoveDistancePg.nrm)
+solo_AvgSurvivalTime.nrm.c = my.center(solo_AvgSurvivalTime.nrm)
+
+Win.Rounds = Log.solo_WinRatio.nrm.c * Log.solo_RoundsPlayed.nrm.c
+Win.Kills = Log.solo_WinRatio.nrm.c * Log.solo_KillsPg.nrm.c
+Win.Damage = Log.solo_WinRatio.nrm.c * Sqrt.solo_DamagePg.nrm.c
+Win.Move = Log.solo_WinRatio.nrm.c * Sqrt.solo_MoveDistancePg.nrm.c
+Win.Time = Log.solo_KillsPg.nrm.c * solo_AvgSurvivalTime.nrm.c
+
+Rounds.Kills = Log.solo_RoundsPlayed.nrm.c * Log.solo_KillsPg.nrm.c
+Rounds.Damage = Log.solo_RoundsPlayed.nrm.c * Sqrt.solo_DamagePg.nrm.c
+Rounds.Move = Log.solo_RoundsPlayed.nrm.c * Sqrt.solo_MoveDistancePg.nrm.c
+Rounds.Time = Log.solo_RoundsPlayed.nrm.c * solo_AvgSurvivalTime.nrm.c
+
+Kills.Damage = Log.solo_KillsPg.nrm.c * Sqrt.solo_DamagePg.nrm.c
+Kills.Move = Log.solo_KillsPg.nrm.c * Sqrt.solo_MoveDistancePg.nrm.c
+Kills.Time = Log.solo_KillsPg.nrm.c * solo_AvgSurvivalTime.nrm.c
+
+Damage.Move = Sqrt.solo_DamagePg.nrm.c * Sqrt.solo_MoveDistancePg.nrm.c
+Damage.Time = Sqrt.solo_DamagePg.nrm.c * solo_AvgSurvivalTime.nrm.c
+
+Time.Move = solo_AvgSurvivalTime.nrm.c * Sqrt.solo_MoveDistancePg.nrm.c
+
+
+
+best.SBC.bc.int = lm(Sqrt.solo_Rating.nrm ~ Log.solo_WinRatio.nrm.c + Log.solo_RoundsPlayed.nrm.c + Log.solo_KillsPg.nrm.c + Sqrt.solo_DamagePg.nrm.c + Sqrt.solo_MoveDistancePg.nrm.c + solo_AvgSurvivalTime.nrm.c + Win.Rounds + Win.Kills + Win.Damage + Win.Move + Win.Time + Rounds.Kills + Rounds.Damage + Rounds.Move + Rounds.Time + Kills.Damage + Kills.Move + Kills.Time+ Damage.Move + Damage.Time + Time.Move)
+summary(best.SBC.bc.int)
+step.int = step(best.SBC.bc.int, direction = "both")
+```
+ The most significant interaction effects are WinRatio to MoveDistance, KillsPg to DamagePg, SurvivalTime To MoveDistance. The only significant relationship that isn't immediately obvious as to why the P-value is so significant is WinRatio to MoveDistance. With Kills Pg to DamagePg, given enough damage, a character will 'die' and that player is out of the competition for first place, meaning that if a person has a large value in Kills per game, they must have a large value in damage per game. But it looks like there is a strong correlation between Win ratio and Move Distance per game, meaing that those players that are able to survive and move around are much more likely to win more and get a better rating.
+
+```{r}
+#best.SBC.bc.2 = lm(Sqrt.solo_Rating.nrm ~ Log.solo_WinRatio.nrm + #Log.solo_RoundsPlayed.nrm + Sqrt.solo_MoveDistancePg.nrm + #Log.solo_KillsPg.nrm + solo_AvgSurvivalTime.nrm + Move.Time + Rounds.Killed)
+#summary(best.SBC.bc.2)
+step.int.red = lm(Sqrt.solo_Rating.nrm ~ Log.solo_WinRatio.nrm.c + Log.solo_RoundsPlayed.nrm.c + Sqrt.solo_DamagePg.nrm.c + Sqrt.solo_MoveDistancePg.nrm.c + solo_AvgSurvivalTime.nrm.c + Win.Kills + Win.Damage + Win.Move + Rounds.Damage + Kills.Damage + Kills.Move + Damage.Move + Time.Move)
+summary(step.int.red)
+anova(step.int.red, step.int)
+
+```
+# Difference between models have a p-value of 0. 
+```{r,fig.height=3.5, fig.width=6}
+par(mfrow = c(1,2))
+plot(step.int.red, main="Stepwise w/Interactions")
+plot(step.int.red$fitted.values, Sqrt.solo_Rating.nrm, main="Sqrt Solo Rating vs Fitted",xlab ="Fitted Sqrt Solo Rating", ylab="Sqrt Solo Rating")
+abline(0,1, col='red')
+plot(step.int.red$fitted.values, rstudent(step.int.red), main="Studentized Deleted Residuals", xlab = 'Fitted Sqrt Solo rating', ylab = 'Student. Del. Resid.')
+
+```
+# All the plots for the reduced stepwise model look nice, with a few outliers, none outside the cook's distance.There is one standardized residual that has an absolute value greater than 4. 
+```{r,fig.height=3.5, fig.width=6}
+par(mfrom = c(1,2))
+plot(step.int.red, which=2, main='Final Model Residuals')
+library(car)
+avPlots(step.int.red)
+step.int.red.dffits = dffits(step.int.red)
+plot(seq(1, length(step.int.red.dffits)), step.int.red.dffits, main='DFFits, Final Model', xlab='Row Number',ylab='DFFits')
+n.step.int.red = step.int.red$df.residual + step.int.red$rank
+Leverage.cut = 2*sqrt(step.int.red$rank / (n.step.int.red))
+Leverage.cut
+abline(Leverage.cut, 0, lty=2)
+abline(-Leverage.cut, 0, lty=2)
+vif(step.int.red)
+mean(vif(step.int.red))
+```
+# The variance inflation factors range from 2 to 47.45. The latter being for Win Ratio and Damage. The VIF is greater than 10 for Win.Kills, Win.Damage, Kills.Move, Damage.Move. With a mean of 12.51.
+```{r}
+summary(step.int.red)
+```
+ From this final model we can see the effect that each predictor has on increasing our response variable solo rating. The predictor with the largest estimate is solo_moveDistancePg, and solo_DamagePg. Meaing that if a player wants to increase their solo rating in PUBG they should move around the arena a lot in search of more gear and more enemies to fight. Since KillsPg and DamagePg are so highly correlated, the removal of one of those predictors does not harm the model greatly. Although survival is the ultimate goal of every PUBG game, this does not mean that a player should sit tight and wait until the rest of the players fight each other. To get a better rating most effectively, a player should work on effectivley manuvering the arena and become proficint in player to player combat.
+ 
+# Final residual standard eror is 0.07, and final Adjusted R^2 of .7052, an improvement of .306 for our Adjusted R-squared from the first order model.

@@ -1,0 +1,78 @@
+---
+title: "Happiness Analysis"
+author: "Noah B Johnson"
+date: "11/3/2017"
+output:
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+# Set echo to TRUE for draft submission
+knitr::opts_chunk$set(echo = FALSE)
+# Set global figure size
+knitr::opts_chunk$set(fig.width=6, fig.height=3.5)
+
+#Library Includes
+library(corrplot)
+library(readr)
+library(diptest)
+library(MASS)
+library(car)
+library(reshape2)
+library(ggplot2)
+library(zoo)
+library(lmtest)
+library(leaps)
+```
+
+```{r import}
+dataset <- read_csv("~/Google Drive/MATH327/NewProject1/hapiness/dataset.csv")
+```
+
+```{r update names}
+# Update variable names for brevity and clarity
+names(dataset) <- c("country","year","AVGHappiness","LogGDPPC","SocialSupport","LifeExpectancy","Freedom","Generosity","AVGIsCorrupt","PosAffect","NegAffect","HappinessSD","HappinessCV")
+
+# attach data for easier reference
+attach(dataset)
+```
+
+
+
+```{r}
+#declare the best model as var fit
+fit <- lm(AVGHappiness ~ (LogGDPPC + SocialSupport + Generosity + AVGIsCorrupt + HappinessCV))
+summary(fit)
+```
+
+```{r}
+plot(fit$fitted.values,AVGHappiness,ylab = "Actual Values",xlab = "Estimated Values")
+abline(0,1,col="red")
+```
+
+```{r}
+plot(fit,1)
+```
+
+```{r}
+boxCox(fit)
+bcAVGHappiness <- bcPower(AVGHappiness,.6)
+```
+
+```{r}
+#declare the best model as var fit
+fit1 <- lm(bcAVGHappiness ~ (LogGDPPC + SocialSupport + Generosity + AVGIsCorrupt + HappinessCV))
+summary(fit1)
+```
+
+
+```{r}
+plot(fit1)
+```
+
+```{r}
+inf <- influence(fit1)
+inf$
+```
+
